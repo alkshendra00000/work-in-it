@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Analytics Dashboard</title>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --text-color: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent-color: #38bdf8;
+      --accent-hover: #0284c7;
+      --border-color: #334155;
+    }
+
+    [data-theme="light"] {
+      --bg-color: #f8fafc;
+      --card-bg: #ffffff;
+      --text-color: #0f172a;
+      --text-muted: #64748b;
+      --accent-color: #0284c7;
+      --accent-hover: #0369a1;
+      --border-color: #e2e8f0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      padding: 20px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    button {
+      background-color: var(--accent-color);
+      color: #fff;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    button:hover {
+      background-color: var(--accent-hover);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    .card h3 {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+
+    .card .value {
+      font-size: 1.8rem;
+      font-weight: bold;
+    }
+
+    .chart-container {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+
+    canvas {
+      width: 100%;
+      height: 250px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    th {
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .form-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    input {
+      padding: 8px 12px;
+      border-radius: 4px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-color);
+      color: var(--text-color);
+      flex: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>ProAnalytics Dashboard</h1>
+    <button id="themeToggle">Toggle Theme</button>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Total Revenue</h3>
+      <div class="value" id="totalRevenue">$0</div>
+    </div>
+    <div class="card">
+      <h3>Active Users</h3>
+      <div class="value" id="activeUsers">0</div>
+    </div>
+    <div class="card">
+      <h3>Transactions</h3>
+      <div class="value" id="totalTransactions">0</div>
+    </div>
+  </div>
+
+  <div class="chart-container">
+    <h3>Revenue Trend</h3>
+    <canvas id="analyticsChart"></canvas>
+  </div>
+
+  <div class="card">
+    <h3>Recent Transactions</h3>
+    <form id="dataForm" class="form-group">
+      <input type="text" id="descInput" placeholder="Description" required />
+      <input type="number" id="amountInput" placeholder="Amount ($)" required />
+      <button type="submit">Add Entry</button>
+    </form>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Description</th>
+          <th>Amount</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+
+  <script>
+    // State Management
+    const state = {
+      theme: localStorage.getItem('theme') || 'dark',
+      transactions: JSON.parse(localStorage.getItem('transactions')) || [
+        { id: 1, desc: 'SaaS Subscription', amount: 120 },
+        { id: 2, desc: 'Client Retainer', amount: 450 },
+        { id: 3, desc: 'Domain Renewal', amount: 15 }
+      ]
+    };
+
+    // DOM Elements
+    const themeBtn = document.getElementById('themeToggle');
+    const dataForm = document.getElementById('dataForm');
+    const tableBody = document.getElementById('tableBody');
+    const canvas = document.getElementById('analyticsChart');
+    const ctx = canvas.getContext('2d');
+
+    // Theme Switcher
+    function applyTheme() {
+      document.documentElement.setAttribute('data-theme', state.theme);
+      localStorage.setItem('theme', state.theme);
+    }
+
+    themeBtn.addEventListener('click', () => {
+      state.theme = state.theme === 'dark' ? 'light' : 'dark';
+      applyTheme();
+      renderChart();
+    });
+
+    // Render Metrics & Table
+    function render() {
+      tableBody.innerHTML = '';
+      let total = 0;
+
+      state.transactions.forEach((t) => {
+        total += t.amount;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>#${t.id}</td>
+          <td>${t.desc}</td>
+          <td>$${t.amount.toFixed(2)}</td>
+          <td><button onclick="deleteTransaction(${t.id})">Delete</button></td>
+        `;
+        tableBody.appendChild(row);
+      });
+
+      document.getElementById('totalRevenue').textContent = `$${total.toFixed(2)}`;
+      document.getElementById('totalTransactions').textContent = state.transactions.length;
+      document.getElementById('activeUsers').textContent = (state.transactions.length * 14).toString();
+
+      localStorage.setItem('transactions', JSON.stringify(state.transactions));
+      renderChart();
+    }
+
+    // Add Transaction
+    dataForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const desc = document.getElementById('descInput').value;
+      const amount = parseFloat(document.getElementById('amountInput').value);
+
+      state.transactions.push({ id: Date.now(), desc, amount });
+      dataForm.reset();
+      render();
+    });
+
+    // Delete Transaction
+    window.deleteTransaction = function(id) {
+      state.transactions = state.transactions.filter(t => t.id !== id);
+      render();
+    };
+
+    // Canvas Chart Rendering
+    function renderChart() {
+      canvas.width = canvas.parentElement.clientWidth - 40;
+      canvas.height = 200;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (state.transactions.length === 0) return;
+
+      const amounts = state.transactions.map(t => t.amount);
+      const max = Math.max(...amounts, 100);
+      const padding = 20;
+      const stepX = (canvas.width - padding * 2) / Math.max(amounts.length - 1, 1);
+
+      ctx.beginPath();
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
+      ctx.lineWidth = 3;
+
+      amounts.forEach((val, idx) => {
+        const x = padding + idx * stepX;
+        const y = canvas.height - padding - (val / max) * (canvas.height - padding * 2);
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+
+      ctx.stroke();
+    }
+
+    // Initial Setup
+    applyTheme();
+    render();
+    window.addEventListener('resize', renderChart);
+  </script>
+</body>
+</html>
